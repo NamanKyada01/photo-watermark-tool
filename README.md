@@ -107,6 +107,13 @@ The app opens a clean, dark-themed window with two panels:
 
 ## ❓ FAQ
 
+**I get a blue "Windows protected your PC" screen when I open it. Is it safe?**
+Yes, it is 100% safe. This is Microsoft Defender SmartScreen warning you that the app is new and not digitally signed by a paid corporate certificate. 
+To run it:
+1. Click **More info** on the blue screen.
+2. Click the **Run anyway** button that appears at the bottom.
+You only have to do this once!
+
 **Do I need to install Python?**
 No. The `.exe` is fully standalone and runs on any Windows 10/11 PC.
 

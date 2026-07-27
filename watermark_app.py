@@ -107,10 +107,8 @@ def get_fitted_font(text: str, img_w: int, img_h: int, font_pct: float, margin: 
     if max_w <= 0:
         return font
     
-    dummy = Image.new("RGBA", (1, 1))
-    draw = ImageDraw.Draw(dummy)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_w = bbox[2] - bbox[0]
+    # Use getlength for pure horizontal width (more reliable than textbbox for scaling)
+    text_w = font.getlength(text)
     
     if text_w > max_w:
         scale_factor = max_w / text_w
@@ -125,13 +123,12 @@ def hex_to_rgba(hex_color: str, opacity: int) -> tuple:
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), opacity)
 
 
-def compute_xy(img_w, img_h, text_w, text_h, bbox, margin, position):
-    x0, y0 = bbox[0], bbox[1]
-    if   position == "Bottom Right": return img_w - text_w - margin - x0, img_h - text_h - margin - y0
-    elif position == "Bottom Left":  return margin - x0,                   img_h - text_h - margin - y0
-    elif position == "Top Right":    return img_w - text_w - margin - x0, margin - y0
-    elif position == "Top Left":     return margin - x0,                   margin - y0
-    else:                            return (img_w - text_w) // 2 - x0,   (img_h - text_h) // 2 - y0
+def compute_xy_and_anchor(img_w, img_h, margin, position):
+    if   position == "Bottom Right": return img_w - margin, img_h - margin, "rd"
+    elif position == "Bottom Left":  return margin, img_h - margin, "ld"
+    elif position == "Top Right":    return img_w - margin, margin, "rt"
+    elif position == "Top Left":     return margin, margin, "lt"
+    else:                            return img_w // 2, img_h // 2, "mm"
 
 
 # ── Core Watermark Renderer ───────────────────────────────────────────────────
@@ -149,16 +146,12 @@ def render_watermark(img: Image.Image, settings: dict) -> Image.Image:
     layer = Image.new("RGBA", rgba.size, (255, 255, 255, 0))
     draw  = ImageDraw.Draw(layer)
 
-    bbox   = draw.textbbox((0, 0), text, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-
-    x, y  = compute_xy(img.width, img.height, text_w, text_h, bbox, margin, position)
+    x, y, anchor = compute_xy_and_anchor(img.width, img.height, margin, position)
 
     r, g, b, a = hex_to_rgba(color, opacity)
     # Subtle dark outline shadow for high contrast on light backgrounds
-    draw.text((x + 1, y + 1), text, font=font, fill=(255 - r, 255 - g, 255 - b, 80))
-    draw.text((x,     y    ), text, font=font, fill=(r, g, b, a))
+    draw.text((x + 1, y + 1), text, font=font, fill=(255 - r, 255 - g, 255 - b, 80), anchor=anchor)
+    draw.text((x,     y    ), text, font=font, fill=(r, g, b, a), anchor=anchor)
 
     return Image.alpha_composite(rgba, layer)
 
@@ -385,7 +378,8 @@ class WatermarkApp:
                  bg="#162036", fg="#f8fafc", troughcolor="#0d1527",
                  highlightthickness=0, activebackground="#38bdf8",
                  sliderrelief="flat", showvalue=False,
-                 command=self._on_fs_change).pack(fill="x")
+                 width=18, sliderlength=32, bd=0,
+                 command=self._on_fs_change).pack(fill="x", pady=(2, 4))
 
         # Color Selection
         section_hdr("🎨", "Color & Opacity")
@@ -428,7 +422,8 @@ class WatermarkApp:
                  bg="#162036", fg="#f8fafc", troughcolor="#0d1527",
                  highlightthickness=0, activebackground="#38bdf8",
                  sliderrelief="flat", showvalue=False,
-                 command=self._on_opacity_change).pack(fill="x")
+                 width=18, sliderlength=32, bd=0,
+                 command=self._on_opacity_change).pack(fill="x", pady=(2, 4))
 
     # ── Right: Live Preview Panel ─────────────────────────────────────────
     def _build_preview_panel(self, parent):

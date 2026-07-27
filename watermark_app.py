@@ -26,9 +26,9 @@ POSITIONS        = ["Bottom Right", "Bottom Left", "Top Right", "Top Left", "Cen
 RENDER_LAND_W, RENDER_LAND_H = 720, 480
 RENDER_PORT_W, RENDER_PORT_H = 480, 720
 
-# UI Display dimensions for live preview canvases
-DISP_LAND_W, DISP_LAND_H = 360, 240
-DISP_PORT_W, DISP_PORT_H = 160, 240
+# UI Display dimensions for live preview canvases (slightly smaller to prevent clipping on some screens)
+DISP_LAND_W, DISP_LAND_H = 300, 200
+DISP_PORT_W, DISP_PORT_H = 133, 200
 
 DEFAULT_SETTINGS = {
     "watermark_text": "© My Photos",
@@ -84,7 +84,15 @@ def save_settings(settings: dict):
 
 
 # ── Font & Scaling Helpers ────────────────────────────────────────────────────
-def load_font(size: int):
+def load_font(size: int, font_name: str = None):
+    # Try the user requested font first
+    if font_name:
+        try:
+            return ImageFont.truetype(font_name, size)
+        except OSError:
+            pass
+
+    # Fallbacks
     for name in ["arial.ttf", "segoeui.ttf", "calibri.ttf", "DejaVuSans.ttf"]:
         try:
             return ImageFont.truetype(name, size)
@@ -96,13 +104,13 @@ def load_font(size: int):
         return ImageFont.load_default()
 
 
-def get_fitted_font(text: str, img_w: int, img_h: int, font_pct: float, margin: int):
+def get_fitted_font(text: str, img_w: int, img_h: int, font_pct: float, margin: int, font_name: str = None):
     """
     Dynamically scale font size and auto-fit so text NEVER clips or overflows
     on narrow or vertical (portrait) DSLR images.
     """
     target_size = max(10, int(img_w * font_pct / 100))
-    font = load_font(target_size)
+    font = load_font(target_size, font_name)
     max_w = img_w - (2 * margin)
     if max_w <= 0:
         return font
@@ -113,7 +121,7 @@ def get_fitted_font(text: str, img_w: int, img_h: int, font_pct: float, margin: 
     if text_w > max_w:
         scale_factor = max_w / text_w
         fitted_size = max(8, int(target_size * scale_factor))
-        font = load_font(fitted_size)
+        font = load_font(fitted_size, font_name)
         
     return font
 
@@ -140,7 +148,8 @@ def render_watermark(img: Image.Image, settings: dict) -> Image.Image:
     pct      = float(settings.get("font_size_pct", 3.5))
 
     margin = max(6, int(img.width * 0.025))
-    font   = get_fitted_font(text, img.width, img.height, pct, margin)
+    font_file = settings.get("font_file")
+    font   = get_fitted_font(text, img.width, img.height, pct, margin, font_file)
 
     rgba  = img.convert("RGBA")
     layer = Image.new("RGBA", rgba.size, (255, 255, 255, 0))
@@ -241,6 +250,19 @@ class WatermarkApp:
         self._preview_job = None
         self._tk_land     = None
         self._tk_port     = None
+        
+        self.FONT_MAP = {
+            "Arial": "arial.ttf",
+            "Segoe UI": "segoeui.ttf",
+            "Calibri": "calibri.ttf",
+            "Times New Roman": "times.ttf",
+            "Verdana": "verdana.ttf",
+            "Comic Sans MS": "comic.ttf",
+            "Impact": "impact.ttf",
+            "Courier New": "cour.ttf",
+            "Georgia": "georgia.ttf",
+            "Trebuchet MS": "trebuc.ttf"
+        }
 
         # Pre-render high-resolution sample photos
         self._sample_land = make_sample_photo(RENDER_LAND_W, RENDER_LAND_H)
@@ -314,15 +336,32 @@ class WatermarkApp:
                                         mode="determinate", style="Green.Horizontal.TProgressbar")
         self.progress.pack(fill="x", pady=(6, 0))
 
-        self.start_btn = tk.Button(
-            self.root, text="▶   Start Watermarking",
-            font=("Segoe UI", 14, "bold"),
-            bg="#22c55e", fg="#ffffff",
-            activebackground="#16a34a", activeforeground="#ffffff",
-            relief="flat", cursor="hand2", pady=12, bd=0,
-            command=self._start
-        )
-        self.start_btn.pack(fill="x", padx=30, pady=(12, 22))
+        self.btn_canvas = tk.Canvas(btm, height=50, bg="#0b1329", highlightthickness=0)
+        self.btn_canvas.pack(fill="x", pady=(12, 22))
+        
+        self.btn_canvas.bind("<Configure>", self._draw_rounded_button)
+        self.btn_canvas.bind("<Button-1>", lambda e: self._start())
+        self.btn_canvas.bind("<Enter>", lambda e: self._draw_rounded_button(None, hover=True))
+        self.btn_canvas.bind("<Leave>", lambda e: self._draw_rounded_button(None, hover=False))
+
+    def _draw_rounded_button(self, event=None, hover=False):
+        self.btn_canvas.delete("all")
+        w = self.btn_canvas.winfo_width()
+        h = self.btn_canvas.winfo_height()
+        if w < 10 or h < 10: return
+        
+        r = 15 # radius
+        color = "#16a34a" if hover else "#22c55e"
+        
+        # Draw rounded rectangle
+        self.btn_canvas.create_arc((0, 0, r*2, r*2), start=90, extent=90, fill=color, outline="")
+        self.btn_canvas.create_arc((w-r*2, 0, w, r*2), start=0, extent=90, fill=color, outline="")
+        self.btn_canvas.create_arc((0, h-r*2, r*2, h), start=180, extent=90, fill=color, outline="")
+        self.btn_canvas.create_arc((w-r*2, h-r*2, w, h), start=270, extent=90, fill=color, outline="")
+        self.btn_canvas.create_rectangle((r, 0, w-r, h), fill=color, outline="")
+        self.btn_canvas.create_rectangle((0, r, w, h-r), fill=color, outline="")
+        
+        self.btn_canvas.create_text(w/2, h/2, text="▶ Start Watermarking", fill="#ffffff", font=("Segoe UI", 12, "bold"))
 
     # ── Left: Modern Settings Panel ───────────────────────────────────────
     def _build_settings(self, parent):
@@ -366,6 +405,16 @@ class WatermarkApp:
                           values=POSITIONS, state="readonly",
                           font=("Segoe UI", 11, "bold"))
         cb.pack(fill="x")
+        
+        # Font Selection
+        section_hdr("🅰", "Font Type")
+        r = row((0, 10))
+        self.font_var = tk.StringVar()
+        self.font_var.trace_add("write", lambda *_: self._schedule_preview())
+        font_cb = ttk.Combobox(r, textvariable=self.font_var,
+                          values=list(self.FONT_MAP.keys()), state="readonly",
+                          font=("Segoe UI", 11, "bold"))
+        font_cb.pack(fill="x")
 
         # Font Size Slider
         self._fs_lbl = tk.Label(card, text="🔠  Font Size  —  3.5% (~42px on 1200px photo)",
@@ -377,8 +426,7 @@ class WatermarkApp:
                  orient="horizontal", variable=self.fs_var,
                  bg="#162036", fg="#f8fafc", troughcolor="#0d1527",
                  highlightthickness=0, activebackground="#38bdf8",
-                 sliderrelief="flat", showvalue=False,
-                 width=18, sliderlength=32, bd=0,
+                 showvalue=False, width=16, sliderlength=24,
                  command=self._on_fs_change).pack(fill="x", pady=(2, 4))
 
         # Color Selection
@@ -421,8 +469,7 @@ class WatermarkApp:
                  variable=self.opacity_var,
                  bg="#162036", fg="#f8fafc", troughcolor="#0d1527",
                  highlightthickness=0, activebackground="#38bdf8",
-                 sliderrelief="flat", showvalue=False,
-                 width=18, sliderlength=32, bd=0,
+                 showvalue=False, width=16, sliderlength=24,
                  command=self._on_opacity_change).pack(fill="x", pady=(2, 4))
 
     # ── Right: Live Preview Panel ─────────────────────────────────────────
@@ -504,6 +551,7 @@ class WatermarkApp:
     def _load_into_ui(self):
         self.text_var.set(self.settings.get("watermark_text", "© My Photos"))
         self.pos_var.set(self.settings.get("position", "Bottom Right"))
+        self.font_var.set("Arial") # Do not save font setting, reset to default each run
         self.fs_var.set(float(self.settings.get("font_size_pct", 3.5)))
         self._set_color(self.settings.get("color", "#FFFFFF"))
         self.opacity_var.set(int(self.settings.get("opacity", 175)))
@@ -514,6 +562,7 @@ class WatermarkApp:
         return {
             "watermark_text": self.text_var.get().strip() or "© My Photos",
             "position":       self.pos_var.get() or "Bottom Right",
+            "font_file":      self.FONT_MAP.get(self.font_var.get(), "arial.ttf"),
             "color":          self._color_hex,
             "opacity":        self.opacity_var.get(),
             "font_size_pct":  round(self.fs_var.get(), 1),

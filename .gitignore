@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyw.bak
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# App settings (user-specific, don't commit)
+watermark_config.json
+
+# Test/temp images
+test*.jpg
+test*.png
+dslr_*.jpg
+dslr_*.png
+
+# Output folder
+watermark/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
